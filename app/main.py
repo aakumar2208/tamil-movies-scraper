@@ -4,7 +4,7 @@ from app.database import supabase
 from app.schemas import Movie, MovieCreate, Review, ReviewCreate
 from typing import List, Dict
 import logging
-from app.scrapper import scrape_tamil_movies  # Import the scraping function
+from app.scrapper import scrape_tamil_movies, scrape_all_movie_reviews  # Import the scraping function
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -83,5 +83,55 @@ def scrape_tamil_movies_endpoint(start_page: int = 1, total_pages: int = 1):
         }
     except Exception as e:
         logger.error(f"Error during scraping: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+@app.post("/scrape-movie-reviews/{movie_id}", response_model=Dict[str, str])
+def scrape_movie_reviews_endpoint(movie_id: str):
+    """
+    Endpoint to scrape all reviews for a given movie.
+    
+    Args:
+        movie_id: The ID of the movie in our database
+    """
+    try:
+        # First fetch the movie details from database
+        movie_response = supabase.table("movies").select("*").eq("id", movie_id).execute()
+        
+        if not movie_response.data:
+            raise HTTPException(status_code=404, detail="Movie not found")
+            
+        movie = movie_response.data[0]
+        letterboxd_url = movie.get('letterboxd_url')
+        
+        if not letterboxd_url:
+            raise HTTPException(
+                status_code=400, 
+                detail="Movie does not have a Letterboxd URL"
+            )
+        
+        logger.info(f"Starting review scraping for movie {movie['title']} ({letterboxd_url})")
+        reviews = scrape_all_movie_reviews(letterboxd_url)
+        
+        # Store all reviews in database with movie_id in a single batch
+        reviews_to_insert = [
+            ReviewCreate(
+                **{
+                    **review_base.model_dump(mode='json'),  # Convert to JSON-serializable format
+                    'movie_id': movie_id
+                }
+            ).model_dump(mode='json')
+            for review_base in reviews
+        ]
+        
+        if reviews_to_insert:
+            response = supabase.table("reviews").insert(reviews_to_insert).execute()
+            stored_count = len(response.data)
+            
+        logger.info(f"Successfully scraped and stored {stored_count} reviews for {movie['title']}")
+        return {
+            "message": f"Successfully scraped and stored {stored_count} reviews for {movie['title']}"
+        }
+    except Exception as e:
+        logger.error(f"Error during review scraping: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 

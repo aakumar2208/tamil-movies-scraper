@@ -20,9 +20,13 @@ class Movie(MovieBase):
         orm_mode = True
 
 class ReviewBase(BaseModel):
-    user: str
-    review: str
-    rating: float
+    author: str
+    content: str
+    rating: Optional[float] = None
+    date: date
+    likes: int = 0
+    comments: int = 0
+    letterboxd_url: str
 
 class ReviewCreate(ReviewBase):
     movie_id: str
