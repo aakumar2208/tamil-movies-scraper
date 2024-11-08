@@ -5,10 +5,10 @@ from datetime import date
 class MovieBase(BaseModel):
     title: str
     genre: List[str]
-    release_date: date = None
     average_rating: Optional[float] = None
-    poster_url: Optional[str] = None
     letterboxd_url: Optional[str] = None
+    poster_url: Optional[str] = None
+    release_date: Optional[date] = None
 
 class MovieCreate(MovieBase):
     pass

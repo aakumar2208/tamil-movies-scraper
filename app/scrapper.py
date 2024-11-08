@@ -44,7 +44,7 @@ def parse_movies(html: str) -> List[MovieCreate]:
 
     # Find all movie containers
     movies = soup.find_all('li', class_='poster-container')
-    logger.info(f"Found {len(movies)} movies on the page")
+    # logger.info(f"Found {len(movies)} movies on the page")
 
     for movie in movies:
         try:
@@ -66,11 +66,11 @@ def parse_movies(html: str) -> List[MovieCreate]:
             # Create MovieCreate object
             movie_data = MovieCreate(
                 title=title,
-                letterboxd_url=letterboxd_url,
-                average_rating=average_rating,
                 genre=[],
+                average_rating=average_rating,
+                letterboxd_url=letterboxd_url,
+                poster_url=None,
                 release_date=None,
-                poster_url=None 
             )
             
             movie_list.append(movie_data)
