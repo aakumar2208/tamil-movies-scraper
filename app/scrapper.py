@@ -82,6 +82,26 @@ def parse_movies(html: str) -> List[MovieCreate]:
 
     return movie_list
 
+def insert_movies(movies: List[MovieCreate]) -> None:
+    """
+    Insert movies into Supabase database.
+    
+    Args:
+        movies: List of MovieCreate objects to insert
+    """
+    try:
+        # Convert movies to list of dictionaries
+        movies_data = [movie.dict() for movie in movies]
+        
+        # Insert movies into Supabase
+        response = supabase.table("movies").upsert(
+            movies_data, 
+        ).execute()
+        
+    except Exception as e:
+        logger.error(f"Error inserting movies into database: {str(e)}")
+        raise
+
 def scrape_tamil_movies(start_page: int = 1, total_pages: int = 1):
     """
     Scrapes Tamil movies from Letterboxd across the specified number of pages.
@@ -101,8 +121,11 @@ def scrape_tamil_movies(start_page: int = 1, total_pages: int = 1):
         movies = parse_movies(html)
         if movies:
             logger.info(f"Successfully parsed {len(movies)} movies from page {page}")
-            # Uncomment the following line when ready to insert into database
-            # insert_movies(movies)
+            try:
+                insert_movies(movies)
+                logger.info(f"Successfully inserted movies from page {page}")
+            except Exception as e:
+                logger.error(f"Failed to insert movies from page {page}: {str(e)}")
         else:
             logger.warning(f"No movies found on page {page}")
 
