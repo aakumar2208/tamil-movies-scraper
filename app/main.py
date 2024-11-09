@@ -135,3 +135,69 @@ def scrape_movie_reviews_endpoint(movie_id: str):
         logger.error(f"Error during review scraping: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
+@app.post("/scrape-all-movie-reviews/", response_model=Dict[str, str])
+async def scrape_all_movie_reviews_endpoint():
+    """
+    Endpoint to scrape reviews for all movies in the database.
+    This will iterate through each movie and scrape their reviews.
+    """
+    try:
+        # Fetch all movies from database
+        movies_response = supabase.table("movies").select("*").execute()
+        
+        if not movies_response.data:
+            raise HTTPException(status_code=404, detail="No movies found in database")
+            
+        total_movies = len(movies_response.data)
+        processed_movies = 0
+        total_reviews = 0
+        
+        logger.info(f"Starting review scraping for {total_movies} movies")
+        
+        for movie in movies_response.data:
+            movie_id = movie['id']
+            letterboxd_url = movie.get('letterboxd_url')
+            
+            if not letterboxd_url:
+                logger.warning(f"Skipping movie {movie['title']} - No Letterboxd URL")
+                continue
+                
+            try:
+                logger.info(f"Scraping reviews for movie: {movie['title']} ({letterboxd_url})")
+                reviews = scrape_all_movie_reviews(letterboxd_url)
+                
+                # Prepare reviews for insertion
+                reviews_to_insert = [
+                    ReviewCreate(
+                        **{
+                            **review_base.model_dump(mode='json'),
+                            'movie_id': movie_id
+                        }
+                    ).model_dump(mode='json')
+                    for review_base in reviews
+                ]
+                
+                if reviews_to_insert:
+                    response = supabase.table("reviews").insert(reviews_to_insert).execute()
+                    stored_count = len(response.data)
+                    total_reviews += stored_count
+                    logger.info(f"Stored {stored_count} reviews for {movie['title']}")
+                
+                processed_movies += 1
+                logger.info(f"Progress: {processed_movies}/{total_movies} movies processed")
+                
+            except Exception as e:
+                logger.error(f"Error processing movie {movie['title']}: {e}")
+                continue
+        
+        success_message = (
+            f"Successfully scraped {total_reviews} reviews "
+            f"from {processed_movies} out of {total_movies} movies"
+        )
+        logger.info(success_message)
+        return {"message": success_message}
+        
+    except Exception as e:
+        logger.error(f"Error during bulk review scraping: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
