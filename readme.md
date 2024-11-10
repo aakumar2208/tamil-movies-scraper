@@ -25,7 +25,7 @@ A FastAPI-based service that scrapes, analyzes, and ranks Tamil movies from Lett
 
 - Clone the repository:
 ```
-git clone <repository-url>
+git clone https://github.com/aakumar2208/tamil-movies-scraper.git
 cd tamil-movies-scraper
 ```
 
