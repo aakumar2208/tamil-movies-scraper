@@ -4,8 +4,8 @@ import json
 from typing import List, Dict, Any
 from openai import OpenAI
 from dotenv import load_dotenv
-from app.database import supabase
-from app.schemas import Review
+from app.core.database import supabase
+from app.models.schemas import Review
 import logging
 
 # Load environment variables
@@ -46,7 +46,6 @@ Reviews to analyze:
 {reviews_text}
 
 Return ONLY an array of numbers representing the sentiment scores in the same order as the reviews."""
-
 def analyze_sentiments(reviews: List[Dict[str, Any]], retry_count: int = 0, max_retries: int = 3) -> List[float]:
     """Analyze sentiments of reviews using OpenAI."""
     try:
@@ -80,7 +79,6 @@ def analyze_sentiments(reviews: List[Dict[str, Any]], retry_count: int = 0, max_
         time.sleep(wait_time)
         
         return analyze_sentiments(reviews, retry_count + 1, max_retries)
-
 def chunk_array(array: List[Any], size: int) -> List[List[Any]]:
     """Split array into chunks of specified size."""
     return [array[i:i + size] for i in range(0, len(array), size)]
@@ -109,7 +107,6 @@ def process_reviews_batch(reviews: List[Dict[str, Any]], batch_number: int) -> i
     except Exception as e:
         print(f"Error processing batch {batch_number}: {str(e)}")
         raise
-
 def process_all_reviews():
     """Process all reviews in the database."""
     try:
@@ -155,12 +152,9 @@ def process_all_reviews():
             
             if len(reviews) < FETCH_SIZE:
                 has_more = False
-                
         print(f"Completed! Total reviews processed: {processed_count}")
         return processed_count
         
     except Exception as e:
         print(f"Error in main process: {str(e)}")
         raise
-
-logger = logging.getLogger(__name__)

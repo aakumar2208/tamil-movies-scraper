@@ -1,9 +1,8 @@
 import logging
 from typing import List, Dict, Any
-from app.database import supabase
+from app.core.database import supabase
 
 logger = logging.getLogger(__name__)
-
 def rank_movies() -> List[Dict[str, Any]]:
     """
     Rank all movies based on their reviews' sentiment scores, likes, and comments using SQL.
@@ -51,7 +50,6 @@ def rank_movies() -> List[Dict[str, Any]]:
                     3
                 )
             })
-        
         # Sort by ranking score
         rankings.sort(key=lambda x: x['ranking_score'], reverse=True)
         
