@@ -2,9 +2,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.encoders import jsonable_encoder
 from app.database import supabase
 from app.schemas import Movie, MovieCreate, Review, ReviewCreate
-from typing import List, Dict
+from typing import List, Dict, Any
 import logging
 from app.scrapper import scrape_tamil_movies, scrape_all_movie_reviews  # Import the scraping function
+from app.analyze_sentiments import process_all_reviews
+import time
+from app.ranker import rank_movies
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -200,4 +203,42 @@ async def scrape_all_movie_reviews_endpoint():
     except Exception as e:
         logger.error(f"Error during bulk review scraping: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
+@app.post("/analyze-reviews/", response_model=Dict[str, Any])
+async def analyze_reviews_endpoint():
+    """
+    Endpoint to analyze all reviews using Gemini AI and calculate sentiment scores.
+    """
+    try:
+        logger.info("Starting sentiment analysis for all reviews...")
+        start_time = time.time()
+        processed_count = process_all_reviews()
+        end_time = time.time()
+        
+        return {
+            "status": "success",
+            "processed_reviews": processed_count,
+            "processing_time_seconds": round(end_time - start_time, 2),
+            "message": f"Successfully analyzed {processed_count} reviews"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error during sentiment analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/rank-movies/", response_model=List[Dict[str, Any]])
+async def rank_movies_endpoint():
+    """
+    Get ranked list of movies based on review sentiment scores, likes, and comments.
+    Returns movies sorted by their ranking score.
+    """
+    try:
+        logger.info("Starting movie ranking calculation...")
+        ranked_movies = rank_movies()
+        logger.info(f"Successfully ranked {len(ranked_movies)} movies")
+        return ranked_movies
+        
+    except Exception as e:
+        logger.error(f"Error during movie ranking: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
