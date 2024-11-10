@@ -6,6 +6,8 @@ from app.schemas import MovieCreate, ReviewBase
 from typing import List
 import logging
 from datetime import datetime, date, timedelta
+import re
+import time
 
 # Set up logging
 logging.basicConfig(
@@ -263,3 +265,120 @@ def scrape_all_movie_reviews(letterboxd_url: str) -> List[ReviewBase]:
         logger.info(f"Scraped {len(reviews)} reviews from page {page} for {letterboxd_url}")
         
     return all_reviews
+
+def extract_ids(imdb_url: str = None, tmdb_url: str = None) -> dict:
+    """Extract IMDb and TMDb IDs from their respective URLs."""
+    imdb_id = re.search(r'tt\d+', imdb_url) if imdb_url else None
+    tmdb_id = re.search(r'movie/(\d+)', tmdb_url) if tmdb_url else None
+    
+    return {
+        'imdb_id': imdb_id.group(0) if imdb_id else None,
+        'tmdb_id': tmdb_id.group(1) if tmdb_id else None
+    }
+
+def scrape_movie_metadata(letterboxd_url: str, retry_count: int = 0) -> dict:
+    """Scrape detailed metadata for a movie from its Letterboxd page."""
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+        response = requests.get(letterboxd_url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Extract IMDb and TMDb URLs
+        imdb_url = soup.select_one('.text-footer a[data-track-action="IMDb"]')
+        tmdb_url = soup.select_one('.text-footer a[data-track-action="TMDb"]')
+        
+        # Extract IDs
+        ids = extract_ids(
+            imdb_url.get('href') if imdb_url else None,
+            tmdb_url.get('href') if tmdb_url else None
+        )
+        
+        # Extract other metadata
+        metadata = {
+            'original_title': soup.select_one('h2.originalname').text.strip() if soup.select_one('h2.originalname') else None,
+            'synopsis': soup.select_one('.review.body-text.-prose.-hero p').text.strip() if soup.select_one('.review.body-text.-prose.-hero p') else None,
+            'runtime': int(re.search(r'(\d+)\s*mins', soup.select_one('.text-footer').text).group(1)) if soup.select_one('.text-footer') else 0,
+            'actors': [a.text.strip() for a in soup.select('.cast-list.text-sluglist a')],
+            'genre': [g.text.strip() for g in soup.select('#tab-genres .text-sluglist a')],
+            'studio': [s.text.strip() for s in soup.select('#tab-details .text-sluglist a[href*="/studio/"]')],
+            'release_date': re.search(r'\((\d{4})\)', soup.select_one('meta[property="og:title"]')['content']).group(1) if soup.select_one('meta[property="og:title"]') else None,
+            **ids,
+            'tmdb_url': tmdb_url.get('href') if tmdb_url else None,
+            'imdb_url': imdb_url.get('href') if imdb_url else None
+        }
+        
+        return metadata
+        
+    except requests.exceptions.RequestException as e:
+        if retry_count < 3 and hasattr(e.response, 'status_code') and e.response.status_code == 429:
+            retry_after = int(e.response.headers.get('retry-after', 60))
+            logger.info(f"Rate limited. Waiting {retry_after} seconds before retry...")
+            time.sleep(retry_after)
+            return scrape_movie_metadata(letterboxd_url, retry_count + 1)
+        raise
+
+def process_all_movies_metadata():
+    """Process and update metadata for all movies in the database."""
+    try:
+        # Fetch all movies
+        response = supabase.table("movies").select("*").execute()
+        movies = response.data
+        
+        if not movies:
+            logger.info("No movies to process")
+            return 0
+            
+        total = len(movies)
+        completed = 0
+        failed = 0
+        
+        logger.info(f"Found {total} movies to process")
+        
+        for movie in movies:
+            try:
+                if not movie.get('letterboxd_url'):
+                    logger.warning(f"No Letterboxd URL for movie: {movie['title']}")
+                    continue
+                    
+                logger.info(f"Processing: {movie['title']}")
+                metadata = scrape_movie_metadata(movie['letterboxd_url'])
+                
+                # Update movie in database
+                update_data = {
+                    'original_title': metadata['original_title'],
+                    'synopsis': metadata['synopsis'],
+                    'runtime': metadata['runtime'],
+                    'actors': metadata['actors'],
+                    'genre': metadata['genre'],
+                    'studio': metadata['studio'],
+                    'tmdb_id': metadata['tmdb_id'],
+                    'imdb_id': metadata['imdb_id'],
+                    'tmdb_url': metadata['tmdb_url'],
+                    'imdb_url': metadata['imdb_url'],
+                    'release_date': f"{metadata['release_date']}-01-01" if metadata['release_date'] else None
+                }
+                
+                supabase.table("movies").update(update_data).eq('id', movie['id']).execute()
+                logger.info(f"✓ Updated: {movie['title']}")
+                completed += 1
+                
+            except Exception as e:
+                logger.error(f"✗ Error processing {movie['title']}: {str(e)}")
+                failed += 1
+                continue
+                
+            # Add small delay between requests
+            time.sleep(2)
+            
+        return {
+            'total': total,
+            'completed': completed,
+            'failed': failed
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing movies: {str(e)}")
+        raise

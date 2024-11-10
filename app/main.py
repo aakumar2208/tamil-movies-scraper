@@ -4,7 +4,7 @@ from app.database import supabase
 from app.schemas import Movie, MovieCreate, Review, ReviewCreate
 from typing import List, Dict, Any
 import logging
-from app.scrapper import scrape_tamil_movies, scrape_all_movie_reviews  # Import the scraping function
+from app.scrapper import scrape_tamil_movies, scrape_all_movie_reviews, process_all_movies_metadata  # Import the scraping function
 from app.analyze_sentiments import process_all_reviews
 import time
 from app.ranker import rank_movies
@@ -240,5 +240,29 @@ async def rank_movies_endpoint():
         
     except Exception as e:
         logger.error(f"Error during movie ranking: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/update-movies-metadata/", response_model=Dict[str, Any])
+async def update_movies_metadata_endpoint():
+    """
+    Endpoint to update metadata for all movies in the database.
+    """
+    try:
+        logger.info("Starting movie metadata update...")
+        start_time = time.time()
+        results = process_all_movies_metadata()
+        end_time = time.time()
+        
+        return {
+            "status": "success",
+            "total_movies": results['total'],
+            "completed": results['completed'],
+            "failed": results['failed'],
+            "processing_time_seconds": round(end_time - start_time, 2),
+            "message": f"Successfully processed {results['completed']} out of {results['total']} movies"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error during metadata update: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 

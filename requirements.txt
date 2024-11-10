@@ -9,6 +9,7 @@ certifi==2024.8.30
 charset-normalizer==3.4.0
 click==8.1.7
 deprecation==2.1.0
+distro==1.9.0
 fastapi==0.115.4
 frozenlist==1.5.0
 gotrue==2.10.0
@@ -19,8 +20,10 @@ httpcore==1.0.6
 httpx==0.27.2
 hyperframe==6.0.1
 idna==3.10
+jiter==0.7.0
 multidict==6.1.0
 mypy-extensions==1.0.0
+openai==1.54.3
 packaging==24.2
 pathspec==0.12.1
 platformdirs==4.3.6
@@ -39,6 +42,7 @@ starlette==0.41.2
 storage3==0.9.0
 supabase==2.10.0
 supafunc==0.7.0
+tqdm==4.67.0
 typing_extensions==4.12.2
 urllib3==2.2.3
 uvicorn==0.32.0

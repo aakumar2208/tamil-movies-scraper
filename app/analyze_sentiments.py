@@ -2,7 +2,7 @@ import os
 import time
 import json
 from typing import List, Dict, Any
-import google.generativeai as genai
+from openai import OpenAI
 from dotenv import load_dotenv
 from app.database import supabase
 from app.schemas import Review
@@ -11,12 +11,12 @@ import logging
 # Load environment variables
 load_dotenv()
 
-# Configure Gemini
-genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+# Initialize OpenAI client
+client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
 # Constants
-BATCH_SIZE = 1000
-FETCH_SIZE = 10000
+BATCH_SIZE = 30  # Reduced batch size to match JS version
+FETCH_SIZE = 5000
 
 def get_sentiment_prompt(reviews: List[Dict[str, Any]]) -> str:
     """Generate the prompt for sentiment analysis."""
@@ -37,36 +37,44 @@ For each review, provide a sentiment score between -1 and 1, where:
 - 0.5 represents moderately positive
 - 1 represents extremely positive/exceptional
 
+Output format: Provide ONLY the numerical scores, in a array, without any additional text or explanation.
+
+Example output:
+{{scores: [0.37, -0.73, 0.9, 0.16, -0.24]}}
+
 Reviews to analyze:
 {reviews_text}
 
 Return ONLY an array of numbers representing the sentiment scores in the same order as the reviews."""
 
 def analyze_sentiments(reviews: List[Dict[str, Any]], retry_count: int = 0, max_retries: int = 3) -> List[float]:
-    """Analyze sentiments of reviews using Gemini."""
+    """Analyze sentiments of reviews using OpenAI."""
     try:
-        model = genai.GenerativeModel('gemini-1.5-pro')
-        prompt = get_sentiment_prompt(reviews)
-        
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                temperature=0.7,
-                top_p=0.8,
-                top_k=40,
-                max_output_tokens=8192,
-            )
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a Tamil cinema sentiment analysis expert. Respond only with a JSON array of sentiment scores. You should return with format of json {scores: [0.37, -0.73, 0.9, 0.16, -0.24]}"
+                },
+                {
+                    "role": "user",
+                    "content": get_sentiment_prompt(reviews)
+                }
+            ],
+            temperature=0.7,
+            max_tokens=4096,
+            response_format={"type": "json_object"}
         )
         
-        # Parse the response text as JSON array
-        sentiments = json.loads(response.text)
-        return sentiments
+        result = json.loads(response.choices[0].message.content)
+        return result['scores']
         
     except Exception as e:
         if retry_count >= max_retries:
             raise Exception(f"Max retry attempts ({max_retries}) reached")
             
-        # Simple exponential backoff
+        # Handle rate limiting
         wait_time = 60 * (2 ** retry_count)
         print(f"Error occurred: {str(e)}. Retrying in {wait_time} seconds...")
         time.sleep(wait_time)
